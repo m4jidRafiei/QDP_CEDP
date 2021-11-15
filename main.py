@@ -54,9 +54,7 @@ if __name__ == '__main__':
 
     TPL = FPL + BPL - epsilon
 
-    print("FPL: " + str(FPL))
-    print("BPL: " + str(BPL))
-    print("TPL: " + str(TPL))
+    print("FPL:" + str(FPL) + " - BPL:" + str(BPL) + " - TPL:" + str(TPL))
 
     FPL, BPL, TPL = qdp.recursive_comulative_leakage_calc_dict(log,cont_log,epsilon,FPL,BPL)
 

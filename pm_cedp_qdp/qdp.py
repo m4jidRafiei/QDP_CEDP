@@ -252,9 +252,7 @@ class QDP():
         BPL = self.comulative_leakage_calc_dict(filtered_backward, epsilon, BPL)
 
         TPL = FPL + BPL - epsilon
-        print("FPL: " + str(FPL))
-        print("BPL: " + str(BPL))
-        print("TPL: " + str(TPL))
+        print("FPL:" + str(FPL) + " - BPL:" + str(BPL) + " - TPL:" + str(TPL))
         if len([trace for trace in next_log for event in trace]) == len([trace for trace in log for event in trace]):
             return FPL, BPL, TPL
         else:
