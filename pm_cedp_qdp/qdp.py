@@ -1,15 +1,21 @@
 import itertools
 import math
+import os
+from pm4py.objects.log.importer.xes import importer as xes_importer
 from pm4py.algo.discovery.transition_system import algorithm as ts_discovery
 import pm4py
 import pandas as pd
 import numpy as np
 from pm_cedp_qdp.utilities import utilities
+from pathlib import Path
+from pm4py.algo.discovery.transition_system import algorithm as ts_discovery
+from pm4py.visualization.transition_system import visualizer as ts_vis
 
 class QDP():
 
     def __init__(self):
         self = self
+
 
 
     def split_log_into_initial_and_continuous(self,log_object,start_point,window_size=1):
@@ -163,13 +169,17 @@ class QDP():
 
         return forward_dict, backward_dict, state_with_id
 
-    def probability_dict_filter(self, probability_dict, cont_log, state_with_id):
+    def probability_dict_filter(self, probability_dict, cont_log, state_with_id, state_size, state_direction):
         trace_variant = []
         for trace in cont_log:
             variant = []
             for event in trace:
                 variant.append(event['concept:name'])
-            trace_variant.append(tuple(variant))
+            if state_direction == "backward":
+                map_variant_to_state_size = variant[-state_size:]
+            else:
+                map_variant_to_state_size = variant[:state_size]
+            trace_variant.append(tuple(map_variant_to_state_size))
         variants = [list(varianttt) for varianttt in set(trace_variant)]
 
         dict_keys = [key for key in probability_dict]
@@ -230,21 +240,27 @@ class QDP():
 
         return cont_log,next_log
 
-    def recursive_comulative_leakage_calc_dict(self, log, cont_log, epsilon, FPL, BPL):
+    def recursive_comulative_leakage_calc_dict(self, export, log, cont_log, epsilon, FPL, BPL, only_complete_traces, state_window, state_direction):
+        file = open(export, "a")
         util = utilities()
         cont_log, next_log = self.next_log(log, cont_log)
-        cont_log_complete = util.remove_incomplete_traces(cont_log)
 
         FPL_valid = False
-        if len(cont_log_complete) >= len(cont_log_complete) / 2:
+        if only_complete_traces:
+            cont_log_complete = util.remove_incomplete_traces(cont_log)
+            if len(cont_log_complete) >= len(cont_log_complete) / 2:
+                FPL_valid = True
+            ts = ts_discovery.apply(cont_log_complete,
+                                    parameters={'direction': state_direction, 'view': "sequence", 'window': state_window,
+                                                'include_data': True})
+        else:
             FPL_valid = True
-
-        ts = ts_discovery.apply(cont_log_complete,
-                                parameters={'direction': "backward", 'view': "sequence", 'window': 200,
-                                            'include_data': True})
+            ts = ts_discovery.apply(cont_log,
+                                    parameters={'direction': state_direction, 'view': "sequence", 'window': state_window,
+                                                'include_data': True})
         forward_dict, backward_dict, state_with_id = self.probability_matrices_non_sparse(ts)
-        filtered_forward = self.probability_dict_filter(forward_dict, next_log, state_with_id)
-        filtered_backward = self.probability_dict_filter(backward_dict, next_log, state_with_id)
+        filtered_forward = self.probability_dict_filter(forward_dict, next_log, state_with_id, state_window, state_direction)
+        filtered_backward = self.probability_dict_filter(backward_dict, next_log, state_with_id, state_window, state_direction)
         if FPL_valid:
             FPL = self.comulative_leakage_calc_dict(filtered_forward, epsilon, FPL)
         else:
@@ -252,8 +268,99 @@ class QDP():
         BPL = self.comulative_leakage_calc_dict(filtered_backward, epsilon, BPL)
 
         TPL = FPL + BPL - epsilon
+        line = str(epsilon) + "," + str(FPL) + "," + str(BPL) + "," + str(TPL) + "\n"
+        file.write(line)
+        file.close()
         print("FPL:" + str(FPL) + " - BPL:" + str(BPL) + " - TPL:" + str(TPL))
         if len([trace for trace in next_log for event in trace]) == len([trace for trace in log for event in trace]):
             return FPL, BPL, TPL
         else:
-            return self.recursive_comulative_leakage_calc_dict(log, next_log, epsilon, FPL, BPL)
+            return self.recursive_comulative_leakage_calc_dict(export, log, next_log, epsilon, FPL, BPL, only_complete_traces, state_window, state_direction)
+
+    def apply(self, log_name, epsilon, export_csv, recursive = True, only_complete_traces = False, state_window = 200, state_direction = "backward"):
+        current_dir = os.path.dirname(os.path.realpath(__file__))
+        export = os.path.join(Path(current_dir).parent.absolute(), 'exports', export_csv)
+        f = open(export, "w")
+
+        BPL = epsilon
+        FPL = epsilon
+        TPL = BPL + FPL - epsilon
+        line = str(epsilon) + "," + str(FPL) + "," + str(BPL) + "," + str(TPL) + "\n"
+        f.write(line)
+        print("Initial leakages-->" + "FPL:" + str(FPL) + " - BPL:" + str(BPL) + " - TPL:" + str(TPL))
+
+        log_path = os.path.join(Path(current_dir).parent.absolute(), 'event_logs', log_name)
+        log = xes_importer.apply(log_path)
+
+        util = utilities()
+        qdp = QDP()
+
+        # -------start_point is the point in time when all the cases started, one can force having complete traces included.-------
+        start_point = util.get_start_point(log)
+        # start_point = "2011-01-15 16:04:43" #for running_example
+        # start_point = "2012-05-07 16:04:43" #for BPIC2013
+
+        # --------adding artificial start ("▶") and end ("■") activities-------
+        log = pm4py.insert_artificial_start_end(log)
+
+        # --------initial_log is the first published event log where all the traces started--------
+        # --------cont_log is the next pulished event log where one event is published per each previously incomplete published trace----
+        initial_log, cont_log = qdp.split_log_into_initial_and_continuous(log, start_point)
+
+        FPL_valid = False
+        # -------If you want to only consider the complete traces for generating temporal correlations------
+        if only_complete_traces:
+            initial_log_complete = util.remove_incomplete_traces(initial_log)
+            if len(initial_log_complete) >= len(initial_log) / 2:
+                FPL_valid = True
+            # ------Generating transition system for calculating temporal correlations-------
+            ts = ts_discovery.apply(initial_log_complete,
+                                    parameters={'direction': state_direction, 'view': "sequence", 'window': state_window,
+                                                'include_data': True})
+
+        else:
+            FPL_valid = True
+            # ------Generating transition system for calculating temporal correlations-------
+            ts = ts_discovery.apply(initial_log,
+                                    parameters={'direction': state_direction, 'view': "sequence", 'window': state_window,
+                                                'include_data': True})
+
+        # viz = ts_vis.apply(ts, parameters={ts_vis.Variants.VIEW_BASED.value.Parameters.FORMAT: "svg"})
+        # ts_vis.view(viz)
+
+        # ------Calculating backward anf forward privacy leakages based on transition system ----------
+        forward_dict, backward_dict, state_with_id = qdp.probability_matrices_non_sparse(ts)
+
+        # ------Keeping the probability information of the states that we have in the cont_log---------
+        filtered_forward = qdp.probability_dict_filter(forward_dict, cont_log, state_with_id, state_window, state_direction)
+        filtered_backward = qdp.probability_dict_filter(backward_dict, cont_log, state_with_id, state_window, state_direction)
+
+        # -----Calculating comulative DP disclosure because of temporal correlations-------
+        if FPL_valid:
+            FPL = qdp.comulative_leakage_calc_dict(filtered_forward, epsilon, FPL)
+        else:
+            FPL = epsilon
+        BPL = qdp.comulative_leakage_calc_dict(filtered_backward, epsilon, BPL)
+
+        TPL = FPL + BPL - epsilon
+
+        line = str(epsilon) + "," + str(FPL) + "," + str(BPL) + "," + str(TPL) + "\n"
+        f.write(line)
+        f.close()
+        print("FPL:" + str(FPL) + " - BPL:" + str(BPL) + " - TPL:" + str(TPL))
+
+        if recursive:
+            FPL, BPL, TPL = qdp.recursive_comulative_leakage_calc_dict(export, log, cont_log, epsilon, FPL, BPL, only_complete_traces, state_window, state_direction)
+
+        return FPL, BPL, TPL
+
+        # -----This implementation is super slow because of sparse matrices-----------
+        # df_forward,df_backward,state_with_id = qdp.probability_matrices(ts)
+        # filtered_forward = qdp.probability_matrices_filter(df_forward, cont_log, state_with_id)
+        # filtered_backward = qdp.probability_matrices_filter(df_backward, cont_log, state_with_id)
+        # FPL = qdp.commulative_leakage_calc_matrix(ts,filtered_forward,0.01,0.01)
+        # BPL = qdp.commulative_leakage_calc_matrix(ts,filtered_backward,0.01,0.01)
+
+        # -----visualization-------
+        # viz = ts_vis.apply(ts, parameters={ts_vis.Variants.VIEW_BASED.value.Parameters.FORMAT: "svg"})
+        # ts_vis.view(viz)
