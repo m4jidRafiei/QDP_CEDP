@@ -1,3 +1,4 @@
+LICENSE
 README.md
 setup.py
 pm_cedp_qdp/__init__.py

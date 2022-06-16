@@ -279,12 +279,20 @@ class QDP():
                     if adjacent_state[0] in forward_dict.keys() and adjacent_state[0] != state:
                         for next_state in forward_dict[adjacent_state[0]]:
                             if next_state[0] != adjacent_state[0]:
+                                #here
                                 forward_dict[state].append((next_state[0], next_state[1] * adjacent_state[1]))
                                 if not move_forward_counted:
                                     max_forward_move[state] += 1
                                     move_forward_counted = True
                         visited_states.append(adjacent_state)
                 depth_counter += 1
+
+        if certain_release:
+            for id_sate in forward_dict.keys():
+                if '■' not in id2state[id_sate].name:
+                    for index, _state in enumerate(forward_dict[id_sate]):
+                        if abs(len(id2state[_state[0]].name) - len(id2state[id_sate].name)) != depth:
+                            forward_dict[id_sate][index] = (_state[0],0)
 
         if not certain_release:
             for id_sate in forward_dict.keys():
@@ -522,10 +530,6 @@ class QDP():
         # ------Keeping the probability information of the states that we have in the next_log---------
         # filtered_forward = qdp.probability_dict_filter(forward_dict, next_log, id2state, state_window, state_direction)
         # filtered_backward = qdp.probability_dict_filter(backward_dict, next_log, id2state, state_window, state_direction)
-
-        for key,value in forward_dict.items():
-            if len(value) == 1:
-                here = value
 
         # -----Calculating comulative DP disclosure because of temporal correlations-------
         if FPL_valid:

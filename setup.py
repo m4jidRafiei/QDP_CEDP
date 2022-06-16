@@ -24,7 +24,9 @@ setuptools.setup(
     install_requires=[
         'numpy>=1.19.5',
         'pandas>=1.1.5',
-        'pm4py>=2.2.15'
+        'pm4py>=2.2.15',
+        'setuptools>=59.6.0',
+        'matplotlib>=2.2.2'
     ],
     project_urls={
         'Source': 'https://github.com/m4jidRafiei/QDP_CEDP'
