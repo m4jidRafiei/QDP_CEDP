@@ -41,21 +41,21 @@ class QDP():
 
 
         #-----Statistics-------
-        util = utilities()
-        con_log = log[log['time:timestamp'] > start_point]
-        cont_log = pm4py.convert_to_event_log(con_log)
-
-        complete_traces_in = util.get_number_complete_traces(init_log)
-        events_in = util.get_number_events(init_log)
-        cases_in = len(init_log)
-        incomplete_traces_in = (cases_in - complete_traces_in)
-        num_event_in = events_in - (complete_traces_in * 2) - incomplete_traces_in
-
-        complete_traces = util.get_number_complete_traces(cont_log)
-        events = util.get_number_events(cont_log)
-        cases = len(cont_log)
-        incomplete_traces = (cases - complete_traces)
-        num_event = events - (complete_traces * 2) - incomplete_traces
+        # util = utilities()
+        # con_log = log[log['time:timestamp'] > start_point]
+        # cont_log = pm4py.convert_to_event_log(con_log)
+        #
+        # complete_traces_in = util.get_number_complete_traces(init_log)
+        # events_in = util.get_number_events(init_log)
+        # cases_in = len(init_log)
+        # incomplete_traces_in = (cases_in - complete_traces_in)
+        # num_event_in = events_in - (complete_traces_in * 2) - incomplete_traces_in
+        #
+        # complete_traces = util.get_number_complete_traces(cont_log)
+        # events = util.get_number_events(cont_log)
+        # cases = len(cont_log)
+        # incomplete_traces = (cases - complete_traces)
+        # num_event = events - (complete_traces * 2) - incomplete_traces
         # -----Statistics-------
 
         init_log, continuous_log = self.next_log(log_object, init_log, window_size, certain_release)
@@ -333,6 +333,7 @@ class QDP():
                 if q_item[1] == 1 and q_item[
                     0] not in non_zero_states_in_d:  # This is based on Theorem 7. It is also obvious based on the equation (24)
                     return previous_alpha + epsilon
+                    # leakage = previous_alpha
                 elif q_item[0] in non_zero_states_in_d:
                     d_item = [state_prob for state_prob in filtered_dict[perms[1]] if state_prob[0] == q_item[0]][0]
                     if q_item[1] > d_item[1]:
@@ -526,6 +527,19 @@ class QDP():
 
         # ------Calculating backward anf forward privacy leakages based on transition system ----------
         forward_dict, backward_dict, id2state, state2id = qdp.probability_matrices_non_sparse(ts, next_log, explore_depth, certain_release)
+
+        #----statistics--------
+        # certain_counter = 0
+        # complete_counter = 0
+        # for state in forward_dict.keys():
+        #     if '■' not in id2state[state].name:
+        #         for item in forward_dict[state]:
+        #             if item[1] == 1:
+        #                 certain_counter += 1
+        #                 break
+        #     else:
+        #         complete_counter += 1
+        # ----statistics--------
 
         # ------Keeping the probability information of the states that we have in the next_log---------
         # filtered_forward = qdp.probability_dict_filter(forward_dict, next_log, id2state, state_window, state_direction)
